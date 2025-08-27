@@ -34,12 +34,29 @@ create_github_workflow() {
     log_info "🔧 Creating GitHub Actions workflow..."
     
     local github_dir=".github/workflows"
-    mkdir -p "$github_dir"
-    
     local workflow_file="$github_dir/decision-policy.yml"
-    cp "$DDD_SYSTEM_DIR/workflows/decision-policy.yml" "$workflow_file"
+    local source_workflow="$DDD_SYSTEM_DIR/workflows/decision-policy.yml"
     
-    log_info "✅ GitHub Actions workflow created at $workflow_file"
+    # Create directory only if it doesn't exist
+    if [[ ! -d "$github_dir" ]]; then
+        log_info "Creating workflow directory: $github_dir"
+        mkdir -p "$github_dir"
+    fi
+    
+    # Check if source workflow exists
+    if [[ ! -f "$source_workflow" ]]; then
+        log_error "Source workflow file not found: $source_workflow"
+        return 1
+    fi
+    
+    # Copy workflow only if it doesn't exist or is different
+    if [[ ! -f "$workflow_file" ]] || ! cmp -s "$source_workflow" "$workflow_file" 2>/dev/null; then
+        log_info "Creating/updating workflow file: $workflow_file"
+        cp "$source_workflow" "$workflow_file"
+        log_info "✅ GitHub Actions workflow created at $workflow_file"
+    else
+        log_info "✅ GitHub Actions workflow is already up to date"
+    fi
 }
 
 # ============================================================================

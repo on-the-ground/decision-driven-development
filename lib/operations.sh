@@ -56,9 +56,11 @@ init_decision_dir() {
     # Create .decision directory
     mkdir -p "$decision_dir"
 
-    # Create README.md
+    # Create README.md only if it doesn't exist
     local readme_file="$decision_dir/README.md"
-    cat > "$readme_file" << EOF
+    if [[ ! -f "$readme_file" ]]; then
+        log_info "Creating README.md for decision directory"
+        cat > "$readme_file" << EOF
 # Decision Records for $(basename "$target_dir")
 
 This directory contains immutable decision records for the $target_dir module.
@@ -81,8 +83,10 @@ ddd decision $target_dir "your-decision-title"
 Created: $(date)
 Directory: $target_dir
 EOF
-
-    chmod 444 "$readme_file"
+        chmod 444 "$readme_file"
+    else
+        log_info "README.md already exists in decision directory"
+    fi
 
     log_info "✅ Initialized $decision_dir with README.md"
     cat << EOF
@@ -121,10 +125,20 @@ create_decision() {
         fi
     fi
 
-    # Generate decision file
-    local timestamp
-    timestamp=$(date +"%Y%m%d-%H%M")
-    local decision_file="$decision_dir/$timestamp-$title.md"
+    # Generate decision file with unique timestamp
+    local timestamp base_timestamp decision_file counter=0
+    base_timestamp=$(date +"%Y%m%d-%H%M")
+    timestamp="$base_timestamp"
+    decision_file="$decision_dir/$timestamp-$title.md"
+    
+    # Ensure unique filename by adding suffix if needed
+    while [[ -f "$decision_file" ]]; do
+        counter=$((counter + 1))
+        timestamp="${base_timestamp}-${counter}"
+        decision_file="$decision_dir/$timestamp-$title.md"
+    done
+    
+    log_info "Creating decision file: $(basename "$decision_file")"
     
     # Get user info safely
     local user_name user_email
