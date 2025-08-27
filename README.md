@@ -133,30 +133,48 @@ This opens an editor with a template:
 ```markdown
 # Password Hashing Algorithm
 
-**TIMESTAMP**: 2024-08-27 12:00
-**STATUS**: TODO
-**MODULE**: src/auth
+**TIMESTAMP**: 2024-08-27 12:00  // generated field
+**STATUS**: IN_PROGRESS, or DONE // TODO is not allowed
+**MODULE**: src/auth  // generated field
 
-## Context
-Our application needs secure password storage...
+---
 
-## Alternatives Considered
-1. bcrypt: Industry standard, well-tested
-2. scrypt: More memory-intensive, newer
-3. Argon2: Winner of password hashing competition
-
-## Decision
+## Decision *(required)*  
 Use Argon2 for new implementations, migrate from bcrypt gradually.
 
-## Implementation
-**FILES**: 
-- src/auth/password.js
-- src/auth/migration.js
+---
 
-## Consequences
-- Better security against rainbow table attacks
-- Requires new dependency (argon2)
-- Migration path needed for existing users
+## Implementation *(optional but recommended)*  
+**FILES**:  
+- src/auth/password.js  
+- src/auth/migration.js  
+
+---
+
+## Context *(optional but recommended#)*  
+> Why is this decision needed? What problem are we solving?  
+> (You may skip if the context is obvious)
+
+Our application needs secure password storage...
+
+---
+
+## Alternatives Considered *(optional)*  
+> List possible approaches and trade-offs  
+> (Feel free to keep it short or skip if not relevant)
+
+1. bcrypt: Industry standard, well-tested  
+2. scrypt: More memory-intensive, newer  
+3. Argon2: Winner of password hashing competition  
+
+---
+
+## Consequences *(optional)*  
+> What becomes easier or harder after this decision?  
+- Better security against rainbow table attacks  
+- Requires new dependency (argon2)  
+- Migration path needed for existing users  
+
 ```
 
 ### 4. Implement Code Changes
@@ -272,26 +290,26 @@ Decision files follow a structured markdown template:
 # Decision Title
 
 **TIMESTAMP**: 2024-08-27 12:00
-**STATUS**: TODO|IN_PROGRESS|DONE  
+**STATUS**: IN_PROGRESS|DONE  // TODO is not allowed
 **MODULE**: src/auth
 
-## Context
-Why is this decision needed? What problem are we solving?
-
-## Alternatives Considered
-1. Option A: Pros/Cons
-2. Option B: Pros/Cons
-3. **Option C (Selected)**: Pros/Cons
-
-## Decision
+## Decision *(required)*
 What are we doing and why?
 
-## Implementation
+## Context *(optional but recommended)*  
+Why is this decision needed? What problem are we solving?
+
+## Implementation *(optional but recommended)*  
 **FILES**: List files that will be changed
 **ESTIMATED_EFFORT**: Time estimate
 **DEPENDENCIES**: Prerequisites
 
-## Consequences
+## Alternatives Considered (optional)
+1. Option A: Pros/Cons
+2. Option B: Pros/Cons
+3. **Option C (Selected)**: Pros/Cons
+
+## Consequences (optional)
 What becomes easier or harder after this decision?
 ```
 
