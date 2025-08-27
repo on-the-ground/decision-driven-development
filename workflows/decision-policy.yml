@@ -1,0 +1,60 @@
+name: Decision-Driven Development Policy
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  enforce-decision-policy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Validate Decision Structure
+      run: |
+        echo "🔍 Checking decision policy for existing .decision directories..."
+        
+        # Source validation library
+        source ./ddd-system/lib/validation.sh
+        
+        # .gitignore policy check
+        if ! validate_gitignore_policy; then
+          echo "❌ .gitignore contains forbidden .decision pattern"
+          exit 1
+        fi
+        
+        # Existing decision files permissions check
+        if ! validate_existing_decision_permissions; then
+          exit 1
+        fi
+        
+        echo "✅ Decision policy validated"
+
+    - name: Check Code-Decision Coupling (per-file, nearest .decision)
+      if: github.event_name == 'pull_request'
+      run: |
+        set -euo pipefail
+        
+        # Source validation library
+        source ./ddd-system/lib/validation.sh
+        
+        BASE=$(git merge-base origin/${{ github.base_ref }} HEAD)
+        
+        echo "🔍 Validating code-decision coupling for range $BASE..HEAD"
+        
+        if ! validate_range_decisions "$BASE" "HEAD"; then
+          echo "❌ PR CHECK FAILED: per-file decisions missing"
+          exit 1
+        fi
+        
+        echo "✅ Code-decision coupling validated (per-file)"
+
+    - name: Run DDD System Tests
+      run: |
+        echo "🧪 Running DDD system tests..."
+        cd ddd-system/tests
+        ./run_tests.sh

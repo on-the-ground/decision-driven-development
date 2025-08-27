@@ -1,0 +1,56 @@
+#!/bin/bash
+# ============================================================================
+# Pre-commit hook for Decision-Driven Development Policy
+# ============================================================================
+
+set -euo pipefail
+
+# Find the DDD system root
+HOOK_DIR="$(dirname "${BASH_SOURCE[0]}")"
+DDD_ROOT=""
+
+# Try to find ddd-system directory
+if [[ -d "$HOOK_DIR/.." ]]; then
+    DDD_ROOT="$HOOK_DIR/.."
+elif [[ -d "$(git rev-parse --show-toplevel)/ddd-system" ]]; then
+    DDD_ROOT="$(git rev-parse --show-toplevel)/ddd-system"
+else
+    echo "❌ ERROR: Cannot find ddd-system directory"
+    exit 1
+fi
+
+# Source validation library
+source "$DDD_ROOT/lib/validation.sh"
+
+echo "🔍 Enforcing Decision-Driven Development policies..."
+
+# Run all validations
+validation_errors=0
+
+# Rule 0: .gitignore policy
+if ! validate_gitignore_policy; then
+    validation_errors=$((validation_errors + 1))
+fi
+
+# Rule 1: Decision-only commits
+if ! validate_decision_only_commits; then
+    validation_errors=$((validation_errors + 1))
+fi
+
+# Rule 2: Decision file immutability
+if ! validate_decision_file_immutability; then
+    validation_errors=$((validation_errors + 1))
+fi
+
+# Rule 3: Per-file decisions
+if ! validate_per_file_decisions; then
+    validation_errors=$((validation_errors + 1))
+fi
+
+# Check if any validations failed
+if [[ $validation_errors -gt 0 ]]; then
+    log_error "Pre-commit validation failed with $validation_errors error(s)"
+    exit 1
+fi
+
+echo "✅ All decision-driven development policies passed"

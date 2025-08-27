@@ -1,0 +1,227 @@
+#!/bin/bash
+# ============================================================================
+# Common utilities for Decision-Driven Development System
+# ============================================================================
+
+set -euo pipefail
+
+# Global variables
+declare -a TEMP_FILES=()
+DDD_LOG_LEVEL=${DDD_LOG_LEVEL:-"INFO"}
+DDD_LOG_FILE=${DDD_LOG_FILE:-"/tmp/ddd-system.log"}
+
+# ============================================================================
+# Logging System
+# ============================================================================
+
+log() {
+    local level="$1"
+    shift
+    local message="$*"
+    local timestamp=$(date +'%Y-%m-%d %H:%M:%S')
+    
+    # Log levels: DEBUG=0, INFO=1, WARN=2, ERROR=3
+    declare -A LOG_LEVELS=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
+    local current_level=${LOG_LEVELS[$DDD_LOG_LEVEL]:-1}
+    local msg_level=${LOG_LEVELS[$level]:-1}
+    
+    if [[ $msg_level -ge $current_level ]]; then
+        local color=""
+        case "$level" in
+            DEBUG) color="\033[0;36m" ;;  # Cyan
+            INFO)  color="\033[0;32m" ;;  # Green
+            WARN)  color="\033[0;33m" ;;  # Yellow
+            ERROR) color="\033[0;31m" ;;  # Red
+        esac
+        
+        # Console output
+        echo -e "${color}[$timestamp] [$level] $message\033[0m" >&2
+        
+        # File logging
+        echo "[$timestamp] [$level] $message" >> "$DDD_LOG_FILE"
+    fi
+}
+
+log_debug() { log "DEBUG" "$@"; }
+log_info()  { log "INFO" "$@"; }
+log_warn()  { log "WARN" "$@"; }
+log_error() { log "ERROR" "$@"; }
+
+# ============================================================================
+# Error Handling
+# ============================================================================
+
+cleanup_temp_files() {
+    if [[ ${#TEMP_FILES[@]} -gt 0 ]]; then
+        log_debug "Cleaning up ${#TEMP_FILES[@]} temporary files"
+        for file in "${TEMP_FILES[@]}"; do
+            [[ -f "$file" ]] && rm -f "$file"
+        done
+        TEMP_FILES=()
+    fi
+}
+
+register_temp_file() {
+    local file="$1"
+    TEMP_FILES+=("$file")
+}
+
+cleanup_on_error() {
+    local line="$1"
+    local command="$2"
+    log_error "Command failed on line $line: $command"
+    cleanup_temp_files
+    exit 1
+}
+
+setup_error_handling() {
+    trap 'cleanup_on_error $LINENO "$BASH_COMMAND"' ERR
+    trap 'cleanup_temp_files' EXIT
+}
+
+# ============================================================================
+# Validation Utilities
+# ============================================================================
+
+validate_file_permissions() {
+    local file="$1"
+    local expected_perms="444"
+    
+    if [[ ! -f "$file" ]]; then
+        log_error "File does not exist: $file"
+        return 1
+    fi
+    
+    if [[ -L "$file" ]]; then
+        log_error "Symlinks not allowed: $file"
+        return 1
+    fi
+    
+    local actual_perms
+    if command -v stat >/dev/null 2>&1; then
+        actual_perms=$(stat -c "%a" "$file" 2>/dev/null || stat -f "%Lp" "$file" 2>/dev/null || echo "???")
+    else
+        log_warn "Cannot check file permissions (stat command not available)"
+        return 0
+    fi
+    
+    if [[ "$actual_perms" != "$expected_perms" ]]; then
+        log_error "Wrong permissions: $file ($actual_perms, expected: $expected_perms)"
+        return 1
+    fi
+    
+    log_debug "File permissions validated: $file ($actual_perms)"
+    return 0
+}
+
+validate_git_repo() {
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        log_error "Not in a git repository"
+        return 1
+    fi
+    return 0
+}
+
+# ============================================================================
+# Git Utilities
+# ============================================================================
+
+get_git_root() {
+    git rev-parse --show-toplevel
+}
+
+has_head() {
+    git rev-parse --verify HEAD >/dev/null 2>&1
+}
+
+get_staged_files() {
+    git diff --cached --name-only
+}
+
+get_changed_files_in_range() {
+    local from="$1"
+    local to="$2"
+    local -a changed=()
+    
+    while IFS=$'\t' read -r status p1 p2; do
+        local path
+        case "$status" in
+            R*|C*) path="${p2:-$p1}" ;;
+            *)     path="$p1" ;;
+        esac
+        [[ -n "${path:-}" ]] && changed+=("$path")
+    done < <(git diff --name-status "$from..$to" 2>/dev/null || true)
+    
+    printf '%s\n' "${changed[@]}"
+}
+
+# ============================================================================
+# Decision File Utilities
+# ============================================================================
+
+is_decision_file() {
+    local file="$1"
+    [[ "$file" == */.decision/* && "$file" == *.md ]]
+}
+
+is_code_file() {
+    local file="$1"
+    [[ "$file" != */.decision/* ]]
+}
+
+find_nearest_decision_dir() {
+    local file="$1"
+    local dir=$(dirname "$file")
+    echo "$dir/.decision"
+}
+
+get_decision_content() {
+    local file="$1"
+    if git show ":$file" >/dev/null 2>&1; then
+        git show ":$file"
+    else
+        cat "$file" 2>/dev/null || true
+    fi
+}
+
+file_mentions_in_content() {
+    local file="$1"
+    local content="$2"
+    local basename_file=$(basename "$file")
+    
+    grep -Fq -- "$file" <<<"$content" || grep -Fq -- "$basename_file" <<<"$content"
+}
+
+# ============================================================================
+# Performance Utilities
+# ============================================================================
+
+run_parallel() {
+    local max_jobs=${1:-4}
+    shift
+    local -a pids=()
+    
+    for cmd in "$@"; do
+        if [[ ${#pids[@]} -ge $max_jobs ]]; then
+            wait "${pids[0]}"
+            pids=("${pids[@]:1}")
+        fi
+        
+        eval "$cmd" &
+        pids+=($!)
+    done
+    
+    # Wait for remaining jobs
+    for pid in "${pids[@]}"; do
+        wait "$pid"
+    done
+}
+
+# ============================================================================
+# Initialization
+# ============================================================================
+
+# Automatically setup error handling when sourced
+setup_error_handling
+
+log_debug "Common utilities loaded"

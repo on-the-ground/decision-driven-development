@@ -1,0 +1,56 @@
+#!/bin/bash
+# ============================================================================
+# Pre-push hook for Decision-Driven Development Policy
+# ============================================================================
+
+set -euo pipefail
+
+# Find the DDD system root
+HOOK_DIR="$(dirname "${BASH_SOURCE[0]}")"
+DDD_ROOT=""
+
+# Try to find ddd-system directory
+if [[ -d "$HOOK_DIR/.." ]]; then
+    DDD_ROOT="$HOOK_DIR/.."
+elif [[ -d "$(git rev-parse --show-toplevel)/ddd-system" ]]; then
+    DDD_ROOT="$(git rev-parse --show-toplevel)/ddd-system"
+else
+    echo "❌ ERROR: Cannot find ddd-system directory"
+    exit 1
+fi
+
+# Source validation library
+source "$DDD_ROOT/lib/validation.sh"
+
+echo "🔍 Final decision policy validation before push..."
+
+# Process each ref being pushed
+validation_errors=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Skip branch deletions
+    if [[ "$local_sha" == "0000000000000000000000000000000000000000" ]]; then
+        continue
+    fi
+    
+    # Determine range start
+    local range_from="$remote_sha"
+    if [[ "$range_from" == "0000000000000000000000000000000000000000" ]]; then
+        # First push: use empty tree
+        range_from="$(git hash-object -t tree /dev/null)"
+    fi
+    
+    log_debug "Validating range $range_from..$local_sha for $local_ref"
+    
+    # Validate the range
+    if ! validate_range_decisions "$range_from" "$local_sha"; then
+        validation_errors=$((validation_errors + 1))
+        log_error "Push blocked for $local_ref"
+    fi
+done
+
+if [[ $validation_errors -gt 0 ]]; then
+    log_error "Pre-push validation failed with $validation_errors error(s)"
+    exit 1
+fi
+
+echo "✅ Pre-push validation passed"

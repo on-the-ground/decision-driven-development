@@ -1,0 +1,87 @@
+#!/bin/bash
+# ============================================================================
+# Pre-receive hook for Decision-Driven Development Policy (Server-side)
+# ============================================================================
+
+set -euo pipefail
+
+# Find the DDD system root
+HOOK_DIR="$(dirname "${BASH_SOURCE[0]}")"
+DDD_ROOT=""
+
+# Try to find ddd-system directory
+if [[ -d "$HOOK_DIR/.." ]]; then
+    DDD_ROOT="$HOOK_DIR/.."
+elif [[ -d "$(git rev-parse --show-toplevel)/ddd-system" ]]; then
+    DDD_ROOT="$(git rev-parse --show-toplevel)/ddd-system"
+else
+    echo "❌ ERROR: Cannot find ddd-system directory"
+    exit 1
+fi
+
+# Source validation library
+source "$DDD_ROOT/lib/validation.sh"
+
+echo "🛡️  Server-side decision policy enforcement..."
+
+violation=false
+while read -r oldrev newrev refname; do
+    # Skip branch deletions
+    [[ "$newrev" == "0000000000000000000000000000000000000000" ]] && continue
+    
+    log_debug "Validating receive for $refname ($oldrev..$newrev)"
+    
+    # Get changed files (using new path for renames)
+    local -a changed_files
+    mapfile -t changed_files < <(get_changed_files_in_range "$oldrev" "$newrev")
+    
+    if [[ ${#changed_files[@]} -eq 0 ]]; then
+        log_debug "No files changed in $refname"
+        continue
+    fi
+    
+    # Get added decision directories
+    local -A added_decision_dirs=()
+    while IFS=$'\t' read -r status p1 p2; do
+        case "$status" in
+            A*|C*|R*)
+                local path="${p2:-$p1}"
+                if is_decision_file "$path"; then
+                    added_decision_dirs["$(dirname "$path")"]=1
+                fi
+                ;;
+        esac
+    done < <(git diff --name-status "$oldrev..$newrev" 2>/dev/null || true)
+    
+    # Validate each code file
+    local -a errors=()
+    for file in "${changed_files[@]}"; do
+        is_code_file "$file" || continue
+        
+        local decision_dir
+        decision_dir=$(find_nearest_decision_dir "$file")
+        
+        # Check if decision directory exists in new tree
+        if ! git ls-tree -d --name-only "$newrev" -- "$decision_dir" >/dev/null 2>&1; then
+            errors+=(" - $file ➜ missing nearest decision dir in received tree: $decision_dir")
+            continue
+        fi
+        
+        # Check if new decision was added to this directory
+        if [[ -z "${added_decision_dirs["$decision_dir"]+x}" ]]; then
+            errors+=(" - $file ➜ no new decision added under $decision_dir in this receive")
+        fi
+    done
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        violation=true
+        log_error "SERVER REJECTED: Decision policy violations detected on $refname"
+        printf '%s\n' "${errors[@]}" >&2
+    fi
+done
+
+if [[ "$violation" == true ]]; then
+    exit 1
+fi
+
+echo "✅ Server-side validation passed"
