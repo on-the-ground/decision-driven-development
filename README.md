@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/on-the-ground/decision-driven-devel
 
 ```bash
 cd your-project
-ddd bootstrap              # Setup DDD system
+ddd init              # Setup DDD system
 ddd init src/auth          # Create decision tracking for auth module
 ddd decision src/auth "jwt-implementation"  # Document your first decision
 ```
@@ -31,8 +31,8 @@ That's it! Your codebase now has decision-driven development enabled. 🚀
 
 ```bash
 # Initialize DDD in your project
-$ ddd bootstrap
-🚀 Bootstrapping Decision-Driven Project...
+$ ddd init
+🚀 initializing Decision-Driven Project...
 ✅ Decision-driven project initialized!
 
 # Create a decision for your authentication module
@@ -83,14 +83,14 @@ cd decision-driven-development
 # Download to your project
 curl -fsSL https://github.com/on-the-ground/decision-driven-development/archive/main.tar.gz | tar -xz
 mv decision-driven-development-main ddd-system
-./ddd-system.sh bootstrap
+./ddd-system.sh init
 ```
 
 ## 🎮 Usage
 
 ### Core Commands
 ```bash
-ddd bootstrap                    # Initialize project with DDD
+ddd init                    # Initialize project with DDD
 ddd init <directory>             # Setup .decision tracking for a module  
 ddd decision <dir> <title>       # Create new decision document
 ddd status                       # Show system health and stats
@@ -115,7 +115,7 @@ ddd github                       # Setup GitHub Actions workflow
 ### 1. Setup Your Project
 ```bash
 cd my-awesome-app
-ddd bootstrap                    # Install git hooks and setup
+ddd init                    # Install git hooks and setup
 ```
 
 ### 2. Initialize Module Tracking

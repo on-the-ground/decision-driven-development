@@ -203,7 +203,7 @@ Usage:
   $0 <command> [arguments...]
 
 CORE COMMANDS:
-  bootstrap                    # Initialize project with DDD system
+  init                         # Initialize project with DDD system
   init <dir>                   # Initialize .decision for specific directory
   decision <dir> <title>       # Create new decision document
 
@@ -224,7 +224,7 @@ UTILITIES:
   uninstall                    # Uninstall DDD system
 
 EXAMPLES:
-  $0 bootstrap                 # Setup project-level decision tracking
+  $0 init                      # Setup project-level decision tracking
   $0 init src/auth             # Initialize .decision for src/auth directory
   $0 decision src/auth "jwt-implementation"  # Create decision in src/auth
   $0 search "apollo federation" # Search all decisions
@@ -253,11 +253,12 @@ main() {
     
     case "$command" in
         # Core operations
-        "bootstrap")
-            bootstrap_decision_project
-            ;;
         "init")
-            init_decision_dir "${2:-}"
+            if [[ -z "${2:-}" ]]; then
+                init_decision_project
+            else
+                init_decision_dir "${2:-}"
+            fi
             ;;
         "decision")
             create_decision "${2:-}" "${3:-}"

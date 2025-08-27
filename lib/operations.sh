@@ -10,8 +10,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 # Project Initialization
 # ============================================================================
 
-bootstrap_decision_project() {
-    log_info "🚀 Bootstrapping Decision-Driven Project..."
+init_decision_project() {
+    log_info "🚀 initializing Decision-Driven Project..."
     
     validate_git_repo || return 1
     
@@ -191,7 +191,7 @@ EOF
     # Validate status change
     if grep -q "\*\*STATUS\*\*: DRAFT" "$decision_file"; then
         log_warn "Decision status is still DRAFT"
-        log_info "Change STATUS to: TODO, IN_PROGRESS, or DONE"
+        log_info "Change STATUS to: IN_PROGRESS, or DONE"
         read -p "Continue anyway? (y/n): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then

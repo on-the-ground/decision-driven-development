@@ -219,7 +219,7 @@ show_usage() {
 🎯 Decision-Driven Development System Installed!
 
 QUICK START:
-  ddd bootstrap                     # Initialize DDD in current project
+  ddd init                     # Initialize DDD in current project
   ddd init src/auth                 # Create .decision directory for a module
   ddd decision src/auth "jwt-impl"  # Create a decision document
   ddd status                        # Check system health
@@ -227,7 +227,7 @@ QUICK START:
 EXAMPLES:
   # Start using DDD in your project
   cd /path/to/your/project
-  ddd bootstrap
+  ddd init
 
   # Create your first decision
   ddd init src/
