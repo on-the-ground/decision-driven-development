@@ -24,6 +24,10 @@ source "$DDD_ROOT/lib/validation.sh"
 
 echo "🔍 Enforcing Decision-Driven Development policies..."
 
+# Set all .decision files to readonly before validation
+echo "🔒 Setting decision files to readonly..."
+find . -path '*/.decision/*.md' -type f -exec chmod 444 {} \; 2>/dev/null || true
+
 # Run all validations
 validation_errors=0
 

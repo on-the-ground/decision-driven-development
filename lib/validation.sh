@@ -234,13 +234,27 @@ validate_range_decisions() {
 validate_existing_decision_permissions() {
     log_debug "Validating permissions of existing decision files"
     
-    local wrong_perms
-    wrong_perms=$(find . -path '*/.decision/*.md' -type f ! -perm 444 | head -1 || true)
+    # Only check staged .decision files for proper permissions
+    local -a staged_decision_files
+    mapfile -t staged_decision_files < <(get_staged_files | grep '^\.decision/.*\.md$' || true)
     
-    if [[ -n "$wrong_perms" ]]; then
-        log_error "Wrong permissions for: $wrong_perms (should be 444)"
-        return 1
+    if [[ ${#staged_decision_files[@]} -eq 0 ]]; then
+        log_debug "No staged decision files to check"
+        return 0
     fi
+    
+    for file in "${staged_decision_files[@]}"; do
+        if [[ ! -f "$file" ]]; then
+            continue
+        fi
+        
+        # Check if file has readonly permissions
+        if [[ ! -r "$file" ]] || [[ -w "$file" ]]; then
+            log_warn "Decision file should be readonly: $file"
+            log_info "Setting readonly permissions..."
+            chmod 444 "$file"
+        fi
+    done
     
     log_debug "Existing decision permissions validation passed"
     return 0

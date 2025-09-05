@@ -83,7 +83,7 @@ ddd decision $target_dir "your-decision-title"
 Created: $(date)
 Directory: $target_dir
 EOF
-        chmod 444 "$readme_file"
+        # README.md remains editable initially
     else
         log_info "README.md already exists in decision directory"
     fi
@@ -201,10 +201,8 @@ EOF
         fi
     fi
 
-    # Set readonly permissions
-    chmod 444 "$decision_file"
-
-    log_info "✅ Created immutable decision: $decision_file"
+    # Keep file editable until commit time
+    log_info "✅ Created decision: $decision_file"
     cat << EOF
 💡 Next steps:
    git add $decision_file
