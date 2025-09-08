@@ -99,10 +99,34 @@ validate_per_file_decisions() {
         return 0
     fi
     
+    # Get directories that have .decision subdirectories in staged files
+    local -A decision_exempted_dirs=()
+    for decision_file in "${decision_files[@]}"; do
+        if [[ "$decision_file" == *"/.decision/"* ]]; then
+            # Extract the parent directory that contains .decision
+            local parent_dir="${decision_file%%/.decision/*}"
+            decision_exempted_dirs["$parent_dir"]=1
+        fi
+    done
+    
     local missing_any=false
     local -a report=()
     
     for file in "${code_files[@]}"; do
+        # Check if this file is under a directory that has .decision changes
+        local file_exempted=false
+        for exempt_dir in "${!decision_exempted_dirs[@]}"; do
+            if [[ "$file" == "$exempt_dir"/* ]]; then
+                file_exempted=true
+                break
+            fi
+        done
+        
+        # If file is exempted, skip validation
+        if [[ "$file_exempted" == true ]]; then
+            continue
+        fi
+        
         local decision_dir
         decision_dir=$(find_nearest_decision_dir "$file")
         
@@ -175,9 +199,38 @@ validate_range_decisions() {
         esac
     done < <(git diff --name-status "$from_ref..$to_ref" 2>/dev/null || true)
     
+    # Get directories that have .decision subdirectories in this range
+    local -A decision_exempted_dirs=()
+    while IFS=$'\t' read -r status p1 p2; do
+        case "$status" in
+            A*|C*|R*)
+                local path="${p2:-$p1}"
+                if [[ "$path" == *"/.decision/"* ]]; then
+                    # Extract the parent directory that contains .decision
+                    local parent_dir="${path%%/.decision/*}"
+                    decision_exempted_dirs["$parent_dir"]=1
+                fi
+                ;;
+        esac
+    done < <(git diff --name-status "$from_ref..$to_ref" 2>/dev/null || true)
+    
     local -a errors=()
     for file in "${changed_files[@]}"; do
         is_code_file "$file" || continue
+        
+        # Check if this file is under a directory that has .decision changes
+        local file_exempted=false
+        for exempt_dir in "${!decision_exempted_dirs[@]}"; do
+            if [[ "$file" == "$exempt_dir"/* ]]; then
+                file_exempted=true
+                break
+            fi
+        done
+        
+        # If file is exempted, skip validation
+        if [[ "$file_exempted" == true ]]; then
+            continue
+        fi
         
         local decision_dir
         decision_dir=$(find_nearest_decision_dir "$file")

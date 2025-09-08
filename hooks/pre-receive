@@ -6,16 +6,16 @@
 set -euo pipefail
 
 # Find the DDD system root
-HOOK_DIR="$(dirname "${BASH_SOURCE[0]}")"
 DDD_ROOT=""
 
-# Try to find ddd-system directory
-if [[ -d "$HOOK_DIR/.." ]]; then
-    DDD_ROOT="$HOOK_DIR/.."
+# Try to find ddd-system directory in standard locations
+if [[ -d "${HOME}/.local/share/ddd-system" ]]; then
+    DDD_ROOT="${HOME}/.local/share/ddd-system"
 elif [[ -d "$(git rev-parse --show-toplevel)/ddd-system" ]]; then
     DDD_ROOT="$(git rev-parse --show-toplevel)/ddd-system"
 else
     echo "❌ ERROR: Cannot find ddd-system directory"
+    echo "Expected locations: ${HOME}/.local/share/ddd-system or repository/ddd-system"
     exit 1
 fi
 
@@ -53,10 +53,39 @@ while read -r oldrev newrev refname; do
         esac
     done < <(git diff --name-status "$oldrev..$newrev" 2>/dev/null || true)
     
+    # Get directories that have .decision subdirectories in this commit
+    local -A decision_exempted_dirs=()
+    while IFS=$'\t' read -r status p1 p2; do
+        case "$status" in
+            A*|C*|R*)
+                local path="${p2:-$p1}"
+                if [[ "$path" == *"/.decision/"* ]]; then
+                    # Extract the parent directory that contains .decision
+                    local parent_dir="${path%%/.decision/*}"
+                    decision_exempted_dirs["$parent_dir"]=1
+                fi
+                ;;
+        esac
+    done < <(git diff --name-status "$oldrev..$newrev" 2>/dev/null || true)
+    
     # Validate each code file
     local -a errors=()
     for file in "${changed_files[@]}"; do
         is_code_file "$file" || continue
+        
+        # Check if this file is under a directory that has .decision changes
+        local file_exempted=false
+        for exempt_dir in "${!decision_exempted_dirs[@]}"; do
+            if [[ "$file" == "$exempt_dir"/* ]]; then
+                file_exempted=true
+                break
+            fi
+        done
+        
+        # If file is exempted, skip validation
+        if [[ "$file_exempted" == true ]]; then
+            continue
+        fi
         
         local decision_dir
         decision_dir=$(find_nearest_decision_dir "$file")
