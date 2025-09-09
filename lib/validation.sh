@@ -273,6 +273,10 @@ validate_range_decisions() {
                     local parent_dir="${path%%/.decision/*}"
                     decision_exempted_dirs["$parent_dir"]=1
                     log_debug "Added to decision_exempted_dirs: '$parent_dir' (from path: $path)"
+                elif [[ "$path" == ".decision/"* ]]; then
+                    # Handle root-level .decision directory
+                    decision_exempted_dirs["."]=1
+                    log_debug "Added to decision_exempted_dirs: '.' (root from path: $path)"
                 fi
                 ;;
         esac
@@ -292,7 +296,12 @@ validate_range_decisions() {
         # Check if this file is under a directory that has .decision changes
         local file_exempted=false
         for exempt_dir in "${!decision_exempted_dirs[@]}"; do
-            if [[ "$file" == "$exempt_dir"/* ]]; then
+            if [[ "$exempt_dir" == "." ]]; then
+                # Root directory exempts all files
+                file_exempted=true
+                log_debug "File $file is exempted by root directory"
+                break
+            elif [[ "$file" == "$exempt_dir"/* ]]; then
                 file_exempted=true
                 log_debug "File $file is exempted by directory: $exempt_dir"
                 break
