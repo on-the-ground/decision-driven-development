@@ -5,8 +5,18 @@
 
 set -euo pipefail
 
-# Source DDD root detection
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/ddd_root.sh"
+# Find and source DDD root detection library
+# When installed as git hook, we need to find the actual DDD system location
+if [[ -f "${HOME}/.local/share/ddd-system/lib/ddd_root.sh" ]]; then
+    source "${HOME}/.local/share/ddd-system/lib/ddd_root.sh"
+elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/../lib/ddd_root.sh" ]]; then
+    # Fallback for development environment
+    source "$(dirname "${BASH_SOURCE[0]}")/../lib/ddd_root.sh"
+else
+    echo "❌ ERROR: Cannot find ddd_root.sh" >&2
+    echo "Expected at: ${HOME}/.local/share/ddd-system/lib/ddd_root.sh" >&2
+    exit 1
+fi
 
 # Find the DDD system root
 DDD_ROOT=$(find_ddd_root) || exit 1
