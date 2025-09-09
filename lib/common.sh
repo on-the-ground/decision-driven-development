@@ -172,7 +172,9 @@ should_validate_file() {
     # Skip git internal files
     [[ "$file" == .git/* ]] && return 1
     # Check if file should be ignored based on .decision/ignore patterns
-    if should_ignore_file "$file"; then
+    local decision_dir
+    decision_dir=$(find_nearest_decision_dir "$file")
+    if should_ignore_file "$file" "$decision_dir"; then
         log_debug "File $file is ignored by .decision/ignore"
         return 1  # Don't validate ignored files
     fi
