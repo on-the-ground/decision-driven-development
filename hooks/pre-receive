@@ -60,10 +60,10 @@ while read -r oldrev newrev refname; do
         esac
     done < <(git diff --name-status "$oldrev..$newrev" 2>/dev/null || true)
     
-    # Validate each code file
+    # Validate each file
     local -a errors=()
     for file in "${changed_files[@]}"; do
-        is_code_file "$file" || continue
+        should_validate_file "$file" || continue
         
         # Check if this file is under a directory that has .decision changes
         local file_exempted=false

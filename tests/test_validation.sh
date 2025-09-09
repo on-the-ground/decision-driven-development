@@ -67,6 +67,8 @@ test_decision_file_immutability() {
     git commit -m "Add decision file" >/dev/null 2>&1
     
     # Test modifying existing decision file (should fail)
+    # First make it writable to simulate someone trying to modify it
+    chmod 644 src/.decision/20240101-1200-new.md
     echo "# Modified Decision" > src/.decision/20240101-1200-new.md
     git add src/.decision/20240101-1200-new.md
     
@@ -161,21 +163,28 @@ EOF
 test_existing_decision_permissions() {
     echo "Testing existing decision permissions validation..."
     
-    # Create decision with correct permissions
-    mkdir -p src/.decision
-    echo "# Good Decision" > src/.decision/good.md
-    chmod 444 src/.decision/good.md
+    # Clean up any existing files first
+    rm -rf src/ test_permissions/
     
+    # Test 1: Only good permissions
+    mkdir -p test_permissions/.decision
+    echo "# Good Decision" > test_permissions/.decision/good.md
+    chmod 444 test_permissions/.decision/good.md
+    
+    cd test_permissions
     assert_true 'validate_existing_decision_permissions' "Correct permissions should pass"
+    cd ..
     
-    # Create decision with wrong permissions
-    echo "# Bad Decision" > src/.decision/bad.md
-    chmod 644 src/.decision/bad.md
+    # Test 2: Add bad permissions  
+    echo "# Bad Decision" > test_permissions/.decision/bad.md
+    chmod 644 test_permissions/.decision/bad.md
     
+    cd test_permissions
     assert_false 'validate_existing_decision_permissions' "Wrong permissions should fail"
+    cd ..
     
     # Clean up
-    rm -rf src/
+    rm -rf test_permissions/
 }
 
 # ============================================================================
@@ -184,6 +193,19 @@ test_existing_decision_permissions() {
 
 test_full_validation_flow() {
     echo "Testing full validation flow..."
+    
+    # Run this test in completely isolated environment
+    local old_dir="$(pwd)"
+    local isolated_dir=$(mktemp -d)
+    cd "$isolated_dir"
+    git init >/dev/null 2>&1
+    git config user.name "Test User"
+    git config user.email "test@example.com"
+    
+    # Copy lib files to parent directory (outside git repo) so they don't get staged
+    mkdir -p ../lib
+    cp -r "/workspaces/github-com-on-the-ground-decision-driven-develop/lib"/* ../lib/
+    source ../lib/validation.sh
     
     # Setup complete scenario
     mkdir -p src/auth/.decision src/utils/.decision
@@ -207,12 +229,13 @@ EOF
     
     # All validations should pass
     assert_true 'validate_gitignore_policy' "Full scenario: gitignore policy"
-    assert_true 'validate_decision_file_immutability' "Full scenario: file immutability"
+    assert_true 'validate_decision_file_immutability' "Full scenario: file immutability"  
     assert_true 'validate_decision_only_commits' "Full scenario: not decision-only"
     assert_true 'validate_per_file_decisions' "Full scenario: per-file decisions"
     
-    # Clean up
-    git reset HEAD >/dev/null 2>&1
+    # Clean up and return to original directory
+    cd "$old_dir"
+    rm -rf "$isolated_dir"
 }
 
 # ============================================================================
@@ -228,12 +251,47 @@ run_validation_tests() {
     # Disable error handling temporarily for tests
     set +e
     
+    # Clean up between tests
+    rm -rf src/ test_permissions/ .gitignore 2>/dev/null || true
+    git reset --hard HEAD 2>/dev/null || true
+    git clean -fd 2>/dev/null || true
+    
     test_gitignore_policy
+    
+    rm -rf src/ test_permissions/ .gitignore 2>/dev/null || true
+    git reset --hard HEAD 2>/dev/null || true
+    git clean -fd 2>/dev/null || true
+    
     test_decision_file_immutability
+    
+    rm -rf src/ test_permissions/ .gitignore 2>/dev/null || true
+    git reset --hard HEAD 2>/dev/null || true
+    git clean -fd 2>/dev/null || true
+    
     test_decision_only_commits
+    
+    rm -rf src/ test_permissions/ .gitignore 2>/dev/null || true
+    git reset --hard HEAD 2>/dev/null || true
+    git clean -fd 2>/dev/null || true
+    
     test_per_file_decisions
+    
+    rm -rf src/ test_permissions/ .gitignore 2>/dev/null || true
+    git reset --hard HEAD 2>/dev/null || true
+    git clean -fd 2>/dev/null || true
+    
     test_range_decisions
+    
+    rm -rf src/ test_permissions/ .gitignore 2>/dev/null || true
+    git reset --hard HEAD 2>/dev/null || true
+    git clean -fd 2>/dev/null || true
+    
     test_existing_decision_permissions
+    
+    rm -rf src/ test_permissions/ .gitignore 2>/dev/null || true
+    git reset --hard HEAD 2>/dev/null || true
+    git clean -fd 2>/dev/null || true
+    
     test_full_validation_flow
     
     # Re-enable error handling

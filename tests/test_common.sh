@@ -24,6 +24,9 @@ test_setup() {
     git init >/dev/null 2>&1
     git config user.name "Test User"
     git config user.email "test@example.com"
+    
+    # Copy library files to temp directory (using absolute path)
+    cp -r "/workspaces/github-com-on-the-ground-decision-driven-develop/lib" .
 }
 
 test_teardown() {
@@ -51,7 +54,7 @@ assert_true() {
     local condition="$1"
     local test_name="${2:-unnamed test}"
     
-    if $condition; then
+    if eval "$condition"; then
         echo "✅ PASS: $test_name"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -64,7 +67,7 @@ assert_false() {
     local condition="$1"
     local test_name="${2:-unnamed test}"
     
-    if ! $condition; then
+    if ! eval "$condition"; then
         echo "✅ PASS: $test_name"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -89,7 +92,13 @@ test_logging_levels() {
     assert_equals "" "$log_output" "DEBUG message filtered out when level is ERROR"
     
     log_output=$(log "ERROR" "error message" 2>&1 || true)
-    assert_true '[[ -n "$log_output" ]]' "ERROR message shown when level is ERROR"
+    if [[ -n "$log_output" ]]; then
+        echo "✅ PASS: ERROR message shown when level is ERROR"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    else
+        echo "❌ FAIL: ERROR message shown when level is ERROR (no output)"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+    fi
 }
 
 test_file_permissions_validation() {
@@ -139,9 +148,9 @@ test_decision_file_utilities() {
     assert_true 'is_decision_file "src/.decision/20240101-1200-test.md"' "Should recognize decision file"
     assert_false 'is_decision_file "src/code.js"' "Should not recognize code file as decision"
     
-    # Test is_code_file
-    assert_true 'is_code_file "src/code.js"' "Should recognize code file"
-    assert_false 'is_code_file "src/.decision/20240101-1200-test.md"' "Should not recognize decision file as code"
+    # Test should_validate_file
+    assert_true 'should_validate_file "src/code.js"' "Should recognize code file for validation"
+    assert_false 'should_validate_file "src/.decision/20240101-1200-test.md"' "Should not validate decision file"
     
     # Test find_nearest_decision_dir
     local decision_dir

@@ -164,9 +164,15 @@ is_decision_file() {
     [[ "$file" == */.decision/* && "$file" == *.md ]]
 }
 
-is_code_file() {
+should_validate_file() {
     local file="$1"
-    [[ "$file" != */.decision/* ]]
+    # Skip files under .decision directory (including root level)
+    [[ "$file" == .decision/* ]] && return 1
+    [[ "$file" == */.decision/* ]] && return 1
+    # Skip git internal files
+    [[ "$file" == .git/* ]] && return 1
+    # All other files should be validated
+    return 0
 }
 
 find_nearest_decision_dir() {
@@ -196,14 +202,21 @@ should_ignore_file() {
     local file="$1"
     local decision_dir="$2"
     
+    log_debug "Checking if file $file should be ignored using $decision_dir"
+    
     # Check if ignore file exists
     local ignore_file="$decision_dir/ignore"
     if [[ ! -f "$ignore_file" ]]; then
+        log_debug "No ignore file found at $ignore_file"
         return 1  # Don't ignore
     fi
     
     # Get the parent directory of .decision
     local parent_dir="${decision_dir%/.decision}"
+    # Handle root-level .decision directory
+    if [[ "$decision_dir" == ".decision" ]]; then
+        parent_dir="."
+    fi
     
     # Read patterns from ignore file
     while IFS= read -r pattern || [[ -n "$pattern" ]]; do
@@ -215,13 +228,45 @@ should_ignore_file() {
         pattern="${pattern#"${pattern%%[![:space:]]*}"}"
         pattern="${pattern%"${pattern##*[![:space:]]}"}"
         
-        # Build the full path pattern relative to parent directory
-        local full_pattern="$parent_dir/$pattern"
-        
-        # Check if file matches the pattern using bash pattern matching
-        if [[ "$file" == $full_pattern ]]; then
-            log_debug "File $file matches ignore pattern: $pattern"
-            return 0  # Should ignore
+        # Handle ** recursive glob patterns
+        if [[ "$pattern" == **/* ]]; then
+            local base_pattern="${pattern#**/}"
+            log_debug "Processing ** pattern: $pattern, base: $base_pattern, parent_dir: $parent_dir, file: $file"
+            
+            # For ** patterns, check if file matches the base pattern recursively
+            local file_to_check="$file"
+            # If parent_dir is root (.), file is already in correct format
+            if [[ "$parent_dir" == "." ]]; then
+                file_to_check="$file"
+                log_debug "Root directory case: file_to_check=$file_to_check"
+            else
+                # For non-root directories, file should always be relative to parent_dir
+                # Since we're checking root-level ignore, file is already relative
+                file_to_check="$file"
+                log_debug "Non-root directory case: using file as-is, file_to_check=$file_to_check"
+            fi
+            
+            log_debug "Checking file_to_check: $file_to_check against base_pattern: $base_pattern"
+            
+            # Enable globstar for ** matching
+            shopt -s globstar 2>/dev/null || true
+            if [[ "$file_to_check" == **/$base_pattern ]]; then
+                shopt -u globstar 2>/dev/null || true
+                log_debug "File $file matches recursive ignore pattern: $pattern"
+                return 0  # Should ignore
+            else
+                log_debug "File $file_to_check does NOT match **/$base_pattern pattern"
+            fi
+            shopt -u globstar 2>/dev/null || true
+        else
+            # Build the full path pattern relative to parent directory
+            local full_pattern="$parent_dir/$pattern"
+            
+            # Check if file matches the pattern using bash pattern matching
+            if [[ "$file" == $full_pattern ]]; then
+                log_debug "File $file matches ignore pattern: $pattern"
+                return 0  # Should ignore
+            fi
         fi
     done < "$ignore_file"
     

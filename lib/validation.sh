@@ -13,9 +13,23 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 validate_gitignore_policy() {
     log_debug "Validating .gitignore policy"
     
-    if find . -name '.gitignore' -type f | xargs grep -RIn '\.decision' 2>/dev/null \
-        | awk -F: '!($3 ~ /^[[:space:]]*#/) {found=1; exit} END{exit !found}'; then
-        log_error "POLICY VIOLATION: .gitignore contains forbidden '.decision' pattern"
+    # Check for .decision patterns that are NOT in comments
+    local violation_found=false
+    while IFS= read -r gitignore_file; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip empty lines
+            [[ -z "$line" ]] && continue
+            # Skip comment lines (lines starting with # after optional whitespace)
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+            # Check if remaining line contains .decision
+            if [[ "$line" == *".decision"* ]]; then
+                log_error "POLICY VIOLATION: .gitignore contains forbidden '.decision' pattern: $line"
+                violation_found=true
+            fi
+        done < "$gitignore_file"
+    done < <(find . -name '.gitignore' -type f 2>/dev/null)
+    
+    if [[ "$violation_found" == true ]]; then
         return 1
     fi
     
@@ -45,14 +59,32 @@ validate_decision_file_immutability() {
             return 1
         fi
         
-        # Set readonly permissions for new decision files
-        if [[ -f "$file" ]] && [[ -w "$file" ]]; then
-            log_debug "Setting readonly permissions for: $file"
-            chmod 444 "$file"
+        # Resolve file path (handle both absolute and relative paths)  
+        local resolved_file="$file"
+        
+        # If file doesn't exist as is, try from git root
+        if [[ ! -f "$resolved_file" ]]; then
+            local git_root
+            git_root=$(get_git_root 2>/dev/null || echo ".")
+            if [[ -f "$git_root/$file" ]]; then
+                resolved_file="$git_root/$file"
+            fi
         fi
         
-        # Validate new file
-        if ! validate_file_permissions "$file"; then
+        # Ensure file exists before validation
+        if [[ ! -f "$resolved_file" ]]; then
+            log_error "Decision file not found: $file (tried: $resolved_file)"
+            return 1
+        fi
+        
+        # Set readonly permissions for new decision files
+        if [[ -w "$resolved_file" ]]; then
+            log_debug "Setting readonly permissions for: $resolved_file"  
+            chmod 444 "$resolved_file"
+        fi
+        
+        # Validate file permissions
+        if ! validate_file_permissions "$resolved_file"; then
             return 1
         fi
     done
@@ -62,7 +94,7 @@ validate_decision_file_immutability() {
 }
 
 validate_decision_only_commits() {
-    local -a code_files=()
+    local -a non_decision_files=()
     local -a decision_files=()
     
     mapfile -t staged_files < <(get_staged_files)
@@ -70,16 +102,16 @@ validate_decision_only_commits() {
     for file in "${staged_files[@]}"; do
         if is_decision_file "$file"; then
             decision_files+=("$file")
-        elif is_code_file "$file"; then
-            code_files+=("$file")
+        elif should_validate_file "$file"; then
+            non_decision_files+=("$file")
         fi
     done
     
-    log_debug "Code changes: ${#code_files[@]} files, Decision changes: ${#decision_files[@]} files"
+    log_debug "Non-decision changes: ${#non_decision_files[@]} files, Decision changes: ${#decision_files[@]} files"
     
-    if [[ ${#code_files[@]} -eq 0 && ${#decision_files[@]} -gt 0 ]]; then
+    if [[ ${#non_decision_files[@]} -eq 0 && ${#decision_files[@]} -gt 0 ]]; then
         log_error "POLICY VIOLATION: Decision-only commits are not allowed"
-        log_info "Create decisions together with actual code changes"
+        log_info "Create decisions together with actual changes"
         return 1
     fi
     
@@ -89,19 +121,19 @@ validate_decision_only_commits() {
 validate_per_file_decisions() {
     log_debug "Validating per-file decision requirements"
     
-    local -a staged_files code_files decision_files
+    local -a staged_files files_to_validate decision_files
     mapfile -t staged_files < <(get_staged_files)
     
     for file in "${staged_files[@]}"; do
         if is_decision_file "$file"; then
             decision_files+=("$file")
-        elif is_code_file "$file"; then
-            code_files+=("$file")
+        elif should_validate_file "$file"; then
+            files_to_validate+=("$file")
         fi
     done
     
-    if [[ ${#code_files[@]} -eq 0 ]]; then
-        log_debug "No code files to validate"
+    if [[ ${#files_to_validate[@]} -eq 0 ]]; then
+        log_debug "No files to validate"
         return 0
     fi
     
@@ -118,7 +150,7 @@ validate_per_file_decisions() {
     local missing_any=false
     local -a report=()
     
-    for file in "${code_files[@]}"; do
+    for file in "${files_to_validate[@]}"; do
         # Check if this file is under a directory that has .decision changes
         local file_exempted=false
         for exempt_dir in "${!decision_exempted_dirs[@]}"; do
@@ -136,16 +168,35 @@ validate_per_file_decisions() {
         local decision_dir
         decision_dir=$(find_nearest_decision_dir "$file")
         
+        # Check if file should be ignored based on ignore patterns
+        # First check nearest decision directory
+        local should_skip=false
+        if should_ignore_file "$file" "$decision_dir"; then
+            log_debug "Skipping ignored file (local): $file"
+            should_skip=true
+        fi
+        
+        # Also check root-level ignore if it exists and we haven't already decided to skip
+        if [[ "$should_skip" == false ]]; then
+            local git_root
+            git_root=$(get_git_root 2>/dev/null || echo ".")
+            local root_decision_dir="$git_root/.decision"
+            if [[ -d "$root_decision_dir" && "$root_decision_dir" != "$decision_dir" ]]; then
+                if should_ignore_file "$file" "$root_decision_dir"; then
+                    log_debug "Skipping ignored file (root): $file"
+                    should_skip=true
+                fi
+            fi
+        fi
+        
+        if [[ "$should_skip" == true ]]; then
+            continue
+        fi
+        
         # Check if .decision directory exists
         if [[ ! -d "$decision_dir" ]]; then
             missing_any=true
             report+=(" - $file ➜ missing nearest decision dir: $decision_dir")
-            continue
-        fi
-        
-        # Check if file should be ignored based on ignore patterns
-        if should_ignore_file "$file" "$decision_dir"; then
-            log_debug "Skipping ignored file: $file"
             continue
         fi
         
@@ -228,7 +279,7 @@ validate_range_decisions() {
     
     local -a errors=()
     for file in "${changed_files[@]}"; do
-        is_code_file "$file" || continue
+        should_validate_file "$file" || continue
         
         # Check if this file is under a directory that has .decision changes
         local file_exempted=false
@@ -314,6 +365,27 @@ validate_range_decisions() {
     fi
     
     log_debug "Range decision validation passed"
+    return 0
+}
+
+validate_existing_decision_permissions() {
+    log_debug "Validating existing decision file permissions"
+    
+    local error_found=false
+    while IFS= read -r decision_file; do
+        if [[ -f "$decision_file" ]]; then
+            if ! validate_file_permissions "$decision_file"; then
+                error_found=true
+            fi
+        fi
+    done < <(find . -name "*.md" -path "*/.decision/*" -type f 2>/dev/null || true)
+    
+    if [[ "$error_found" == true ]]; then
+        log_error "POLICY VIOLATION: Existing decision files have wrong permissions"
+        return 1
+    fi
+    
+    log_debug "Existing decision permissions validation passed"
     return 0
 }
 
