@@ -45,6 +45,12 @@ validate_decision_file_immutability() {
             return 1
         fi
         
+        # Set readonly permissions for new decision files
+        if [[ -f "$file" ]] && [[ -w "$file" ]]; then
+            log_debug "Setting readonly permissions for: $file"
+            chmod 444 "$file"
+        fi
+        
         # Validate new file
         if ! validate_file_permissions "$file"; then
             return 1
@@ -134,6 +140,12 @@ validate_per_file_decisions() {
         if [[ ! -d "$decision_dir" ]]; then
             missing_any=true
             report+=(" - $file ➜ missing nearest decision dir: $decision_dir")
+            continue
+        fi
+        
+        # Check if file should be ignored based on ignore patterns
+        if should_ignore_file "$file" "$decision_dir"; then
+            log_debug "Skipping ignored file: $file"
             continue
         fi
         
@@ -241,6 +253,31 @@ validate_range_decisions() {
             continue
         fi
         
+        # Check if file should be ignored based on ignore patterns
+        # For range validation, we need to check the ignore file in the to_ref
+        local ignore_content
+        ignore_content=$(git show "$to_ref:$decision_dir/ignore" 2>/dev/null || echo "")
+        if [[ -n "$ignore_content" ]]; then
+            local parent_dir="${decision_dir%/.decision}"
+            local should_ignore=false
+            while IFS= read -r pattern || [[ -n "$pattern" ]]; do
+                [[ -z "$pattern" ]] && continue
+                [[ "$pattern" =~ ^[[:space:]]*# ]] && continue
+                pattern="${pattern#"${pattern%%[![:space:]]*}"}"
+                pattern="${pattern%"${pattern##*[![:space:]]}"}"
+                local full_pattern="$parent_dir/$pattern"
+                if [[ "$file" == $full_pattern ]]; then
+                    should_ignore=true
+                    break
+                fi
+            done <<< "$ignore_content"
+            
+            if [[ "$should_ignore" == true ]]; then
+                log_debug "Skipping ignored file in range: $file"
+                continue
+            fi
+        fi
+        
         # Check if new decision was added to this directory
         if [[ -z "${added_decision_dirs["$decision_dir"]+x}" ]]; then
             errors+=(" - $file ➜ no new decision added under $decision_dir in this range")
@@ -280,35 +317,3 @@ validate_range_decisions() {
     return 0
 }
 
-# ============================================================================
-# CI/CD Validation
-# ============================================================================
-
-validate_existing_decision_permissions() {
-    log_debug "Validating permissions of existing decision files"
-    
-    # Only check staged .decision files for proper permissions
-    local -a staged_decision_files
-    mapfile -t staged_decision_files < <(get_staged_files | grep '^\.decision/.*\.md$' || true)
-    
-    if [[ ${#staged_decision_files[@]} -eq 0 ]]; then
-        log_debug "No staged decision files to check"
-        return 0
-    fi
-    
-    for file in "${staged_decision_files[@]}"; do
-        if [[ ! -f "$file" ]]; then
-            continue
-        fi
-        
-        # Check if file has readonly permissions
-        if [[ ! -r "$file" ]] || [[ -w "$file" ]]; then
-            log_warn "Decision file should be readonly: $file"
-            log_info "Setting readonly permissions..."
-            chmod 444 "$file"
-        fi
-    done
-    
-    log_debug "Existing decision permissions validation passed"
-    return 0
-}

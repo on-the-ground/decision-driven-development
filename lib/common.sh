@@ -192,6 +192,42 @@ file_mentions_in_content() {
     grep -Fq -- "$file" <<<"$content" || grep -Fq -- "$basename_file" <<<"$content"
 }
 
+should_ignore_file() {
+    local file="$1"
+    local decision_dir="$2"
+    
+    # Check if ignore file exists
+    local ignore_file="$decision_dir/ignore"
+    if [[ ! -f "$ignore_file" ]]; then
+        return 1  # Don't ignore
+    fi
+    
+    # Get the parent directory of .decision
+    local parent_dir="${decision_dir%/.decision}"
+    
+    # Read patterns from ignore file
+    while IFS= read -r pattern || [[ -n "$pattern" ]]; do
+        # Skip empty lines and comments
+        [[ -z "$pattern" ]] && continue
+        [[ "$pattern" =~ ^[[:space:]]*# ]] && continue
+        
+        # Trim whitespace
+        pattern="${pattern#"${pattern%%[![:space:]]*}"}"
+        pattern="${pattern%"${pattern##*[![:space:]]}"}"
+        
+        # Build the full path pattern relative to parent directory
+        local full_pattern="$parent_dir/$pattern"
+        
+        # Check if file matches the pattern using bash pattern matching
+        if [[ "$file" == $full_pattern ]]; then
+            log_debug "File $file matches ignore pattern: $pattern"
+            return 0  # Should ignore
+        fi
+    done < "$ignore_file"
+    
+    return 1  # Don't ignore
+}
+
 # ============================================================================
 # Performance Utilities
 # ============================================================================

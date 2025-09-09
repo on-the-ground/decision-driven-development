@@ -142,15 +142,6 @@ system_validate() {
     
     local validation_errors=0
     
-    # Run all core validations
-    if ! validate_gitignore_policy; then
-        validation_errors=$((validation_errors + 1))
-    fi
-    
-    if ! validate_existing_decision_permissions; then
-        validation_errors=$((validation_errors + 1))
-    fi
-    
     # Check for orphaned code files (files without decisions)
     log_info "Checking for orphaned code files..."
     local orphaned_files=0

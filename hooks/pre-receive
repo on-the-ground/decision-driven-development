@@ -5,19 +5,11 @@
 
 set -euo pipefail
 
-# Find the DDD system root
-DDD_ROOT=""
+# Source DDD root detection
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/ddd_root.sh"
 
-# Try to find ddd-system directory in standard locations
-if [[ -d "${HOME}/.local/share/ddd-system" ]]; then
-    DDD_ROOT="${HOME}/.local/share/ddd-system"
-elif [[ -d "$(git rev-parse --show-toplevel)/ddd-system" ]]; then
-    DDD_ROOT="$(git rev-parse --show-toplevel)/ddd-system"
-else
-    echo "❌ ERROR: Cannot find ddd-system directory"
-    echo "Expected locations: ${HOME}/.local/share/ddd-system or repository/ddd-system"
-    exit 1
-fi
+# Find the DDD system root
+DDD_ROOT=$(find_ddd_root) || exit 1
 
 # Source validation library
 source "$DDD_ROOT/lib/validation.sh"
