@@ -272,10 +272,18 @@ validate_range_decisions() {
                     # Extract the parent directory that contains .decision
                     local parent_dir="${path%%/.decision/*}"
                     decision_exempted_dirs["$parent_dir"]=1
+                    log_debug "Added to decision_exempted_dirs: '$parent_dir' (from path: $path)"
                 fi
                 ;;
         esac
     done < <(git diff --name-status "$from_ref..$to_ref" 2>/dev/null || true)
+    
+    # Debug: show all exempted directories
+    if [[ ${#decision_exempted_dirs[@]} -gt 0 ]]; then
+        log_debug "Decision exempted directories: ${!decision_exempted_dirs[*]}"
+    else
+        log_debug "No decision exempted directories found"
+    fi
     
     local -a errors=()
     for file in "${changed_files[@]}"; do
@@ -286,6 +294,7 @@ validate_range_decisions() {
         for exempt_dir in "${!decision_exempted_dirs[@]}"; do
             if [[ "$file" == "$exempt_dir"/* ]]; then
                 file_exempted=true
+                log_debug "File $file is exempted by directory: $exempt_dir"
                 break
             fi
         done
@@ -294,6 +303,8 @@ validate_range_decisions() {
         if [[ "$file_exempted" == true ]]; then
             continue
         fi
+        
+        log_debug "File $file is NOT exempted, proceeding with validation"
         
         local decision_dir
         decision_dir=$(find_nearest_decision_dir "$file")

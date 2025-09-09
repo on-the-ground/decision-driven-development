@@ -211,10 +211,20 @@ should_ignore_file() {
     
     log_debug "Checking if file $file should be ignored using $decision_dir"
     
-    # Check if ignore file exists
+    # Check if ignore file exists in the specified directory
     local ignore_file="$decision_dir/ignore"
-    if [[ ! -f "$ignore_file" ]]; then
-        log_debug "No ignore file found at $ignore_file"
+    local found_ignore_file=""
+    
+    if [[ -f "$ignore_file" ]]; then
+        found_ignore_file="$ignore_file"
+    elif [[ "$decision_dir" != ".decision" && -f ".decision/ignore" ]]; then
+        # If no local ignore file, check root ignore file as fallback
+        found_ignore_file=".decision/ignore"
+        log_debug "Using root ignore file as fallback: .decision/ignore"
+    fi
+    
+    if [[ -z "$found_ignore_file" ]]; then
+        log_debug "No ignore file found at $ignore_file or .decision/ignore"
         return 1  # Don't ignore
     fi
     
