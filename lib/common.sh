@@ -171,6 +171,11 @@ should_validate_file() {
     [[ "$file" == */.decision/* ]] && return 1
     # Skip git internal files
     [[ "$file" == .git/* ]] && return 1
+    # Check if file should be ignored based on .decision/ignore patterns
+    if should_ignore_file "$file"; then
+        log_debug "File $file is ignored by .decision/ignore"
+        return 1  # Don't validate ignored files
+    fi
     # All other files should be validated
     return 0
 }
