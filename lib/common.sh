@@ -85,7 +85,6 @@ setup_error_handling() {
 
 validate_file_permissions() {
     local file="$1"
-    local expected_perms="444"
     
     if [[ ! -f "$file" ]]; then
         log_error "File does not exist: $file"
@@ -105,8 +104,9 @@ validate_file_permissions() {
         return 0
     fi
     
-    if [[ "$actual_perms" != "$expected_perms" ]]; then
-        log_error "Wrong permissions: $file ($actual_perms, expected: $expected_perms)"
+    # Accept both 444 (r--r--r--) and 555 (r-xr-xr-x) - both are read-only
+    if [[ "$actual_perms" != "444" && "$actual_perms" != "555" ]]; then
+        log_error "Wrong permissions: $file ($actual_perms, expected: 444 or 555 - read-only)"
         return 1
     fi
     
@@ -250,12 +250,13 @@ should_ignore_file() {
             
             # Enable globstar for ** matching
             shopt -s globstar 2>/dev/null || true
-            if [[ "$file_to_check" == **/$base_pattern ]]; then
+            # Check both patterns: **/$base_pattern and $base_pattern (for root level files)
+            if [[ "$file_to_check" == **/$base_pattern ]] || [[ "$file_to_check" == $base_pattern ]]; then
                 shopt -u globstar 2>/dev/null || true
                 log_debug "File $file matches recursive ignore pattern: $pattern"
                 return 0  # Should ignore
             else
-                log_debug "File $file_to_check does NOT match **/$base_pattern pattern"
+                log_debug "File $file_to_check does NOT match pattern: $base_pattern or **/$base_pattern"
             fi
             shopt -u globstar 2>/dev/null || true
         else
