@@ -34,7 +34,7 @@ while read -r oldrev newrev refname; do
     log_debug "Validating receive for $refname ($oldrev..$newrev)"
     
     # Get changed files (using new path for renames)
-    local -a changed_files
+    changed_files=()
     mapfile -t changed_files < <(get_changed_files_in_range "$oldrev" "$newrev")
     
     if [[ ${#changed_files[@]} -eq 0 ]]; then
@@ -43,11 +43,11 @@ while read -r oldrev newrev refname; do
     fi
     
     # Get added decision directories
-    local -A added_decision_dirs=()
+    declare -A added_decision_dirs=()
     while IFS=$'\t' read -r status p1 p2; do
         case "$status" in
             A*|C*|R*)
-                local path="${p2:-$p1}"
+                path="${p2:-$p1}"
                 if is_decision_file "$path"; then
                     added_decision_dirs["$(dirname "$path")"]=1
                 fi
@@ -56,14 +56,14 @@ while read -r oldrev newrev refname; do
     done < <(git diff --name-status "$oldrev..$newrev" 2>/dev/null || true)
     
     # Get directories that have .decision subdirectories in this commit
-    local -A decision_exempted_dirs=()
+    declare -A decision_exempted_dirs=()
     while IFS=$'\t' read -r status p1 p2; do
         case "$status" in
             A*|C*|R*)
-                local path="${p2:-$p1}"
+                path="${p2:-$p1}"
                 if [[ "$path" == *"/.decision/"* ]]; then
                     # Extract the parent directory that contains .decision
-                    local parent_dir="${path%%/.decision/*}"
+                    parent_dir="${path%%/.decision/*}"
                     decision_exempted_dirs["$parent_dir"]=1
                 fi
                 ;;
@@ -71,12 +71,12 @@ while read -r oldrev newrev refname; do
     done < <(git diff --name-status "$oldrev..$newrev" 2>/dev/null || true)
     
     # Validate each file
-    local -a errors=()
+    errors=()
     for file in "${changed_files[@]}"; do
         should_validate_file "$file" || continue
         
         # Check if this file is under a directory that has .decision changes
-        local file_exempted=false
+        file_exempted=false
         for exempt_dir in "${!decision_exempted_dirs[@]}"; do
             if [[ "$file" == "$exempt_dir"/* ]]; then
                 file_exempted=true
@@ -89,7 +89,7 @@ while read -r oldrev newrev refname; do
             continue
         fi
         
-        local decision_dir
+        decision_dir=""
         decision_dir=$(find_nearest_decision_dir "$file")
         
         # Check if decision directory exists in new tree

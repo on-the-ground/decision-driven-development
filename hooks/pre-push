@@ -35,7 +35,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
     
     # Determine range start
-    local range_from="$remote_sha"
+    range_from="$remote_sha"
     if [[ "$range_from" == "0000000000000000000000000000000000000000" ]]; then
         # First push: use empty tree
         range_from="$(git hash-object -t tree /dev/null)"
